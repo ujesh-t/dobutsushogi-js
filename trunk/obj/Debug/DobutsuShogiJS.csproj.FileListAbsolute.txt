@@ -1,8 +1,0 @@
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiWeb\DobutsuShogiJS\bin\DobutsuShogiJS.dll
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiWeb\DobutsuShogiJS\bin\DobutsuShogiJS.pdb
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiWeb\DobutsuShogiJS\obj\Debug\DobutsuShogiJS.dll
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiWeb\DobutsuShogiJS\obj\Debug\DobutsuShogiJS.pdb
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiJS\DobutsuShogiJS\bin\DobutsuShogiJS.dll
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiJS\DobutsuShogiJS\bin\DobutsuShogiJS.pdb
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiJS\DobutsuShogiJS\obj\Debug\DobutsuShogiJS.dll
-C:\Users\Hoge\Documents\Visual Studio 2010\Projects\DobutsuShogiJS\DobutsuShogiJS\obj\Debug\DobutsuShogiJS.pdb
