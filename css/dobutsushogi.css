@@ -1,0 +1,263 @@
+﻿
+/*
+@-o-viewport {
+  width: 320px;
+}
+*/
+
+*
+{
+  tap-highlight-color: transparent;
+  -o-tap-highlight-color: transparent;
+  -moz-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+*:focus
+{
+    outline: none;
+}
+*:hover
+{
+    outline: none;
+}
+body
+{
+    font-size:12px;
+}
+ul, ol
+{
+    padding:0px;
+}
+
+/* ----------------------------------------------------------------- *
+ * タイトル
+ * ----------------------------------------------------------------- */ 
+
+div#header-root
+{
+    width:275px;
+    height:40px;
+    margin:5px 0px 5px 5px;
+    border:0px solid blue;
+}
+div#header-title
+{
+    float:left;
+    width:200px;
+    height:40px;
+    line-height:40px;
+    vertical-align:middle;
+    border:0px solid red;    
+} 
+div#header-title h1
+{
+    font-size: 20px;
+    margin:0px;
+} 
+div#header-links
+{
+    float:right;
+    width:75px;
+    height:40px;
+    border:0px solid black;
+    vertical-align:middle;
+}
+
+div#header-links ul
+{
+    list-style-type:square;
+    margin:0px;
+    font-size:14px;
+}
+
+/* ----------------------------------------------------------------- *
+ * 盤面
+ * ----------------------------------------------------------------- */ 
+div#board-root
+{
+    position:relative;
+    border-collapse:collapse;
+    border-spacing:0px;
+    margin:10px 0px 0px 0px;
+    border:0px solid black;
+    width:320px;
+    height:450px;
+}     
+div#board-root .label-h 
+{
+    position:absolute;
+    border:0px solid black; 
+    width:80px;
+    height:15px;
+    font-size:14px;
+    text-align:center;
+    vertical-align:middle;
+    top:53px;
+}
+div#board-root .label-v 
+{
+    position:absolute;
+    border:0px solid black; 
+    width:15px;
+    height:80px;
+    line-height:80px;
+    font-size:14px;
+    vertical-align:middle;
+    text-align:center;
+    left:23px;
+}
+div#label-A
+{
+    left:40px;
+}
+div#label-B
+{
+    left:120px;
+}
+div#label-C
+{
+    left:200px;
+}
+div#label-1
+{
+    top:70px;
+}
+div#label-2
+{
+    top:150px;
+}
+div#label-3
+{
+    top:230px;
+}
+div#label-4
+{
+    top:310px;
+}
+
+/* ----------------------------------------------------------------- *
+ * 手駒
+ * ----------------------------------------------------------------- */    
+div.hand
+{
+    position:absolute;
+    width:240px;
+    height:40px;
+    border:1px dashed black;
+} 
+div#hand1
+{
+    left:40px;
+    top:0px;
+	margin:0px 0px 0px 0px;
+} 
+div#hand0
+{
+    left:40px;
+    top:410px;
+    margin:0px 0px 0px 0px;
+} 
+.hand .hand-lines
+{
+    border-collapse:collapse;
+    border-spacing:0px;
+} 
+.hand .hand-lines .cell-hand
+{
+    width:40px;
+    height:40px;
+    border:0px solid black;
+} 
+
+/* ----------------------------------------------------------------- *
+ * 駒、マス
+ * ----------------------------------------------------------------- */    
+div#board {           
+    position:absolute;
+    top:70px;
+    left:40px;
+    border-style:none;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);  
+}
+table#board-lines
+{
+    position:relative;
+    border-collapse:collapse;
+    border-spacing:0px;
+    border: 1px solid black;
+    width:240px;
+    height:320px;
+}
+td.cell 
+{ 
+    border:1px dashed black; 
+    width:80px;
+    height:80px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);  
+}
+td.cell-movable
+{
+    background-color: #FFFF33;
+}
+td.cell-placeable
+{
+    background-color: #66FF33;
+}
+td.cell-active 
+{
+    background-color: #FFBBBB;
+}
+
+div.piece 
+{
+    position:absolute;
+    z-index:1;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);  
+}
+div.piece-hand
+{
+    position:absolute;
+    z-index:1;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);  
+}
+
+/* ----------------------------------------------------------------- *
+ * Dialog
+ * ----------------------------------------------------------------- */
+/* Dialogの閉じるボタンを無効に */
+.ui-dialog-titlebar-close  
+{
+    display: none; 
+}
+div.dialog
+{
+    font-size:12px;
+}
+div#setting-root fieldset
+{
+    margin:5px 0px 5px 0px;
+    padding:5px 7px 5px 7px;
+    text-align:center;
+}
+fieldset#setting-order label
+{
+    width:100px;
+}      
+fieldset#setting-ai label
+{
+    width:200px;
+}      
+
+/* ----------------------------------------------------------------- *
+ * for debugging
+ * ----------------------------------------------------------------- */
+div#debug
+{
+    width:320px;
+    font-size:12px;
+    /*display:none;*/
+}
+select#debug-logs
+{
+    width:215px;
+}
