@@ -15,7 +15,7 @@ var PlayerTurn = {
     com: 1
 };
 PlayerTurn.invert = function (value) {
-    return (value + 1) % 2;
+    return (value + 1) & 1;
 };
 
 // ----------------------------------------------------------------------------------------------
@@ -339,10 +339,11 @@ Board.prototype = {
     },
 
     move: function (beforePos, afterPos, turn) {
+        var data = this.data;
         var beforeVal = (beforePos.row << 2) + beforePos.col;
         var afterVal = (afterPos.row << 2) + afterPos.col;
-        var movingPiece = this.data[beforeVal];  // 移動する駒
-        var currentPiece = Piece.demote(this.data[afterVal]); // 今ある駒
+        var movingPiece = data[beforeVal];  // 移動する駒
+        var currentPiece = Piece.demote(data[afterVal]); // 今ある駒
         var sp;
         var mpd;
         var i;
@@ -351,12 +352,12 @@ Board.prototype = {
             movingPiece = Piece.promote(movingPiece);
         }
         // 移動
-        this.data[afterVal] = movingPiece;
-        this.data[beforeVal] = Piece.empty;
+        data[afterVal] = movingPiece;
+        data[beforeVal] = Piece.empty;
         // 敵の駒を取っている
         if (currentPiece != Piece.empty) {
             // 取られた敵の勢力圏変更
-            sp = this.sphere[PlayerTurn.invert(turn)];
+            sp = this.sphere[(turn + 1) & 1];
             mpd = Piece.movablePosDiff[currentPiece];
             for (i = mpd.length - 1; i >= 0; i--) {
                 sp[afterVal + mpd[i]]--;
@@ -387,15 +388,16 @@ Board.prototype = {
     },
 
     toggleTurn: function () {
-        this.turn = PlayerTurn.invert(this.turn);
+        this.turn = (this.turn + 1) & 1;
         return this;
     },
 
     eachPiece: function (func) {
         var piece;
+        var data = this.data;
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
-                piece = this.data[(r << 2) + c];
+                piece = data[(r << 2) + c];
                 if (piece != Piece.empty) {
                     func(piece, r, c);
                 }
@@ -405,12 +407,13 @@ Board.prototype = {
 
     getPiecePositions: function (turn) {
         var result = new Array;
-        var piece;
+        var data = this.data;
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
                 var pos = (r << 2) + c;
-                var piece = this.data[pos];
-                if (Piece.isSelf(piece, turn)) {
+                var piece = data[pos];
+                var isSelf = (turn == 0) ? piece < 16 : piece >= 16;
+                if (isSelf) {
                     result[result.length] = BoardPosition.obj[pos];
                 }
             }
@@ -454,14 +457,16 @@ Board.prototype = {
     },
 
     isChecked: function (turn) {
-        var enemyTurn = PlayerTurn.invert(turn);
+        var data = this.data;
+        var enemyTurn = (turn + 1) & 1;
         var enemyPiecePositions = this.getPiecePositions(enemyTurn);
         for (var i = 0; i < enemyPiecePositions.length; i++) {
             var enemyMovablePositions = this.getMovablePositions(enemyPiecePositions[i], enemyTurn);
             for (var j = 0; j < enemyMovablePositions.length; j++) {
                 var pos = enemyMovablePositions[j];
-                var piece = this.data[(pos.row << 2) + pos.col];
-                if (Piece.isSelf(piece, turn) && (piece & 7) == Piece.lion) {
+                var piece = data[(pos.row << 2) + pos.col];
+                var isSelf = (turn == 0) ? piece < 16 : piece >= 16;
+                if (isSelf && (piece & 7) == Piece.lion) {
                     return true;
                 }
             }
@@ -508,7 +513,6 @@ Board.prototype = {
         var sp1 = sp[1];
         var evaluateTable = Piece.evaluateTable;
         var getTurn = Piece.turn;
-        var invert = PlayerTurn.invert;
         // 盤上の駒の価値
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
@@ -516,14 +520,14 @@ Board.prototype = {
                 var piece = data[pos];
                 if (piece > 0) {
                     var type = piece & 7;
-                    var myTurn = getTurn(piece);
-                    var enemyTurn = invert(myTurn);
+                    var pieceTurn = (piece < 16) ? 0 : 1;
+                    var enemyTurn = (pieceTurn + 1) & 1;
                     var value = evaluateTable[piece];
 
                     switch (type) {
                         case Piece.lion:
                             // トライ加点
-                            if (myTurn == 0) {
+                            if (pieceTurn == 0) {
                                 switch (r) {
                                     case 0: value += 50; break;
                                     case 1: value += 5; break;
@@ -542,8 +546,8 @@ Board.prototype = {
 
                     // 駒の効き具合を加算
                     var es = sp[enemyTurn][pos];
-                    var ms = sp[myTurn][pos];
-                    value = value + ms - es;
+                    var ps = sp[pieceTurn][pos];
+                    value = value + ps - es;
 
                     if (piece >= 16) {
                         value *= -1;
@@ -677,12 +681,13 @@ AIEngine.prototype = {
                         var aroundCell = data[newPosVal];
                         if(aroundCell == null)
                             continue;
-                        if (aroundCell == 0 || isEnemy(aroundCell, turn)) {
+                        // 何も無いマスか、または敵がいるときは、動ける
+                        if (aroundCell == 0 || ((turn == 0) ? aroundCell >= 16 : aroundCell < 16)) {
                             var bpCurrent = BoardPosition.obj[posVal]
                             var bpNext = BoardPosition.obj[newPosVal];
                             ret[ret.length] = new Move(bpCurrent, bpNext);
                         }
-                    }                    
+                    }     
                 }
             }
         }
@@ -874,7 +879,7 @@ AIEngine.prototype = {
     },
 
     playout: function (board, turn) {
-        var enemyTurn = PlayerTurn.invert(turn);
+        var enemyTurn = (turn + 1) & 1;
         if (board.isDeadLion(enemyTurn) || board.triesLion(turn))
             return 1;
         if (board.isDeadLion(turn) || board.triesLion(enemyTurn))
