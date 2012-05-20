@@ -6,50 +6,6 @@
 // ----------------------------------------------------------------------------------------------
 var MT = new MersenneTwister();
 
-// ----------------------------------------------------------------------------------------------
-// Utility
-// ----------------------------------------------------------------------------------------------
-// 配列探索（自作オブジェクトでequalsを実装しているもののみ）
-Array.prototype.myIndexOf = function (obj) {
-    if (this.length == 0)
-        return -1;
-    if (obj == null)
-        return -1;
-    for (var i = 0; i < this.length; i++) {
-        if (this[i].equals(obj))
-            return i;
-    }
-    return -1;
-};
-Array.prototype.getRandomItem = function () {
-    return this[~ ~(Math.random() * this.length)];
-};
-Array.prototype.removeAt = function (index) {
-    Array.prototype.splice.apply(this, [i, 1]);
-    return this;
-};
-Array.prototype.remove = function (value) {
-    for (var i = 0; i < this.length; i++) {
-        if (this[i] === value) {
-            this.splice(i, 1);
-        }
-    }
-    return this;
-};
-Array.prototype.clone = function () {
-    return Array.apply(null, this);
-}
-$.extend({
-    format: function (fmt) {
-        for (var i = 1; i < arguments.length; i++) {
-            var reg = new RegExp("\\{" + (i - 1) + "\\}", "g");
-            fmt = fmt.replace(reg, arguments[i]);
-        }
-        return fmt;
-    }
-});
-
-
 
 // ----------------------------------------------------------------------------------------------
 // PlayerTurn
@@ -122,14 +78,36 @@ Piece.movement[Piece.kirin1] = Piece.movement[Piece.kirin0];
 Piece.movement[Piece.zo1] = Piece.movement[Piece.zo0];
 Piece.movement[Piece.lion1] = Piece.movement[Piece.lion0];
 
+Piece.movablePosDiff = new Array;
+Piece.movablePosDiff[Piece.empty] = new Array;
+(function () {
+    var m = Piece.movement;
+    var types = [Piece.hiyoko, Piece.niwatori, Piece.kirin, Piece.zo, Piece.lion];
+    for (var i = 0; i < types.length; i++) {
+        var man = types[i] + 8;
+        var com = types[i] + 16;
+        Piece.movablePosDiff[man] = new Array;
+        Piece.movablePosDiff[com] = new Array;
+        for (var r = 0; r <= 2; r++) {
+            for (var c = 0; c <= 2; c++) {
+                if (m[man][r * 3 + c])
+                    Piece.movablePosDiff[man].push(((r - 1) << 2) + (c - 1));
+                if (m[com][r * 3 + c])
+                    Piece.movablePosDiff[com].push(((r - 1) << 2) + (c - 1));
+            }
+        }
+    }
+})();
+
+
 Piece.create = function (type, turn) {
-    return type + ((turn + 1) * 8);
+    return type + ((turn + 1) << 3);
 };
 Piece.type = function (piece) {
     return piece & 7;
 };
 Piece.turn = function (piece) {
-    return piece < Piece.com ? 0 : 1;
+    return piece < 16 ? 0 : 1;
 };
 Piece.isPiece = function (piece) {
     return piece > 0;
@@ -143,22 +121,22 @@ Piece.imagePath = function (piece) {
     return "img/" + Piece.imagePathArray[Piece.type(piece)] + Piece.turn(piece) + ".png";
 };
 Piece.isMan = function (piece) {
-    return (piece & Piece.man) != 0;
+    return (piece & 8) != 0;
 };
 Piece.isCom = function (piece) {
-    return (piece & Piece.com) != 0;
+    return (piece & 16) != 0;
 };
 Piece.isSelf = function (piece, turn) {
-    if (turn == PlayerTurn.man)
-        return Piece.isMan(piece);
+    if (turn == 0)
+        return piece < 16;
     else
-        return Piece.isCom(piece);
+        return piece >= 16;
 };
 Piece.isEnemy = function (piece, turn) {
-    if (turn == PlayerTurn.man)
-        return Piece.isCom(piece);
+    if (turn == 0)
+        return piece >= 16;
     else
-        return Piece.isMan(piece);
+        return piece < 16;
 };
 Piece.convert = function (piece) {
     if (Piece.isMan(piece))
@@ -167,16 +145,14 @@ Piece.convert = function (piece) {
         return piece - 8;
 };
 Piece.promote = function (piece) {
-    if (Piece.type(piece) == Piece.hiyoko)
-        return Piece.create(Piece.niwatori, Piece.turn(piece));
-    else
-        return piece;
+    if ((piece & 7) == 1) // hiyoko
+        return Piece.create(2, Piece.turn(piece)); // niwatori
+    return piece;
 };
 Piece.demote = function (piece) {
-    if (Piece.type(piece) == Piece.niwatori)
-        return Piece.create(Piece.hiyoko, Piece.turn(piece));
-    else
-        return piece;
+    if ((piece & 7) == 2) // niwatori
+        return Piece.create(1, Piece.turn(piece)); // hiyoko
+    return piece;
 };
 Piece.eachMovement = function (piece, func) {
     if (!Piece.isPiece(piece))
@@ -190,38 +166,17 @@ Piece.eachMovement = function (piece, func) {
         }
     }
 };
-Piece.evaluateTable = [0, 2, 4, 7, 7, 100];
-Piece.evaluate = function (piece, row, col) {
-    piece = piece || 0;
-    var type = Piece.type(piece);
-    var turn = Piece.turn(piece);
-    var value = Piece.evaluateTable[type];
+Piece.evaluateTable = new Array;
+(function () {
+    var e = Piece.evaluateTable;
+    e[Piece.empty] = 0;
+    e[Piece.hiyoko0] = e[Piece.hiyoko1] = 2;
+    e[Piece.niwatori0] = e[Piece.niwatori1] = 4;
+    e[Piece.kirin0] = e[Piece.kirin1] = 7;
+    e[Piece.zo0] = e[Piece.zo1] = 7;
+    e[Piece.lion0] = e[Piece.lion1] = 100;
+})();
 
-    switch (type) {
-        case Piece.hiyoko:
-            if (turn == PlayerTurn.man && row == 0) value = -1;
-            else if (turn == PlayerTurn.com && row == 3) value = -1;
-            break;
-        case Piece.lion:
-            // トライ加点
-            if (turn == PlayerTurn.man) {
-                switch (row) {
-                    case 0: value += 50; break;
-                    case 1: value += 5; break;
-                    case 2: value -= 2; break;
-                }
-            }
-            else {
-                switch (row) {
-                    case 3: value += 50; break;
-                    case 2: value += 5; break;
-                    case 1: value -= 2; break;
-                }
-            }
-            break;
-    }
-    return value;
-}
 Piece.toString = function (piece) {
     switch (Piece.type(piece)) {
         case Piece.hiyoko: return "H";
@@ -243,14 +198,12 @@ var BoardPosition = function (row, col) {
     this.row = row;
     this.col = col;
 };
-
 BoardPosition.empty = new BoardPosition(-1, -1);
 BoardPosition.fromCoordinate = function (pos) {
     var row = Math.floor((pos.top + 40) / 80);
     var col = Math.floor((pos.left + 40) / 80);
     return new BoardPosition(row, col);
 };
-
 
 BoardPosition.prototype = {
     equals: function (obj) {
@@ -272,6 +225,16 @@ BoardPosition.prototype = {
         return "(" + this.row + ", " + this.col + ")";
     }
 };
+
+BoardPosition.obj = new Array(4 * 3);
+(function () {
+    for (var r = 0; r < 4; r++) {
+        for (var c = 0; c < 3; c++) {
+            BoardPosition.obj[(r << 2) + c] = new BoardPosition(r, c);
+        }
+    }
+})();
+
 
 // ----------------------------------------------------------------------------------------------
 // PieceChange
@@ -376,43 +339,51 @@ Board.prototype = {
     },
 
     move: function (beforePos, afterPos, turn) {
-        var currentPiece = Piece.demote(this.data[(afterPos.row << 2) + afterPos.col]); // 今ある駒
-        var movingPiece = this.data[(beforePos.row << 2) + beforePos.col];  // 移動する駒
+        var beforeVal = (beforePos.row << 2) + beforePos.col;
+        var afterVal = (afterPos.row << 2) + afterPos.col;
+        var movingPiece = this.data[beforeVal];  // 移動する駒
+        var currentPiece = Piece.demote(this.data[afterVal]); // 今ある駒
         var sp;
+        var mpd;
+        var i;
         // 成る
         if (afterPos.isPromotable(turn)) {
             movingPiece = Piece.promote(movingPiece);
         }
         // 移動
-        this.data[(afterPos.row << 2) + afterPos.col] = movingPiece;
-        this.data[(beforePos.row << 2) + beforePos.col] = Piece.empty;
+        this.data[afterVal] = movingPiece;
+        this.data[beforeVal] = Piece.empty;
         // 敵の駒を取っている
         if (currentPiece != Piece.empty) {
             // 取られた敵の勢力圏変更
             sp = this.sphere[PlayerTurn.invert(turn)];
-            Piece.eachMovement(currentPiece, function (dr, dc) {
-                sp[((afterPos.row + dr) << 2) + (afterPos.col + dc)]--;
-            });
+            mpd = Piece.movablePosDiff[currentPiece];
+            for (i = mpd.length - 1; i >= 0; i--) {
+                sp[afterVal + mpd[i]]--;
+            }
             // 成りを戻し、味方にconvertして手駒追加
             currentPiece = Piece.convert(Piece.demote(currentPiece));
             this.hand[turn].push(currentPiece);
         }
         // 移動前の箇所から勢力圏を消し、新しい場所に設定
         sp = this.sphere[turn];
-        Piece.eachMovement(movingPiece, function (dr, dc) {
-            sp[((beforePos.row + dr) << 2) + (beforePos.col + dc)]--;
-            sp[((afterPos.row + dr) << 2) + (afterPos.col + dc)]++;
-        });
+        mpd = Piece.movablePosDiff[movingPiece];
+        for (i = mpd.length - 1; i >= 0; i--) {
+            sp[beforeVal + mpd[i]]--;
+            sp[afterVal + mpd[i]]++;
+        }
         return new PieceChange(currentPiece, movingPiece);
     },
     place: function (pos, piece, turn) {
-        this.data[(pos.row << 2) + pos.col] = piece;
+        var posVal = (pos.row << 2) + pos.col;
+        this.data[posVal] = piece;
         this.hand[turn].remove(piece);
         // 影響度を加算
         var sp = this.sphere[turn];
-        Piece.eachMovement(piece, function (dr, dc) {
-            sp[((pos.row + dr) << 2) + (pos.col + dc)]++;
-        });
+        var mpd = Piece.movablePosDiff[piece];
+        for (i = mpd.length - 1; i >= 0; i--) {
+            sp[posVal + mpd]++;
+        }
     },
 
     toggleTurn: function () {
@@ -433,52 +404,49 @@ Board.prototype = {
     },
 
     getPiecePositions: function (turn) {
-        var result = [];
+        var result = new Array;
         var piece;
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
-                piece = this.data[(r << 2) + c];
+                var pos = (r << 2) + c;
+                var piece = this.data[pos];
                 if (Piece.isSelf(piece, turn)) {
-                    result.push(new BoardPosition(r, c));
+                    result[result.length] = BoardPosition.obj[pos];
                 }
             }
         }
         return result;
     },
 
-    getMovablePositions: function () {
-        var row, col, turn;
-        if (arguments.length == 2) {
-            row = arguments[0].row;
-            col = arguments[0].col;
-            turn = arguments[1];
-        } else if (arguments.length == 3) {
-            row = arguments[0];
-            col = arguments[1];
-            turn = arguments[2];
-        }
+    getMovablePositions: function (pos, turn) {
         var result = [];
-        var piece = this.data[(row << 2) + col];
-        if (piece != Piece.empty) {
-            var _self = this;
-            Piece.eachMovement(piece, function (dr, dc) {
-                var aroundPos = new BoardPosition(row + dr, col + dc);
-                var aroundCell = _self.data[(aroundPos.row << 2) + aroundPos.col];
-                // aroundCellは境界外ではundefined. でもチェックはいらなさそう。
-                if (aroundCell == Piece.empty || Piece.isEnemy(aroundCell, turn)) {
-                    result.push(aroundPos);
-                }
-            });
+        var posVal = (pos.row << 2) + pos.col;
+        var data = this.data;
+        var piece = data[posVal];
+        var isEnemy = Piece.isEnemy;
+
+        var movablePosDiff = Piece.movablePosDiff[piece];
+        for (var i = movablePosDiff.length - 1; i >= 0; i--) {
+            var newPosVal = posVal + movablePosDiff[i];
+            var aroundCell = data[newPosVal];
+            if (aroundCell == null)
+                continue;
+            if (aroundCell == 0 || isEnemy(aroundCell, turn)) {
+                result.push(BoardPosition.obj[newPosVal]);
+            }
         }
+
         return result;
     },
 
     getPlaceablePositions: function () {
         var result = [];
+        var data = this.data;
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
-                if (this.data[(r << 2) + c] == Piece.empty) {
-                    result.push(new BoardPosition(r, c));
+                var pos = (r << 2) + c;
+                if (data[pos] == 0) {
+                    result.push(BoardPosition.obj[pos]);
                 }
             }
         }
@@ -493,7 +461,7 @@ Board.prototype = {
             for (var j = 0; j < enemyMovablePositions.length; j++) {
                 var pos = enemyMovablePositions[j];
                 var piece = this.data[(pos.row << 2) + pos.col];
-                if (Piece.isSelf(piece, turn) && Piece.type(piece) == Piece.lion) {
+                if (Piece.isSelf(piece, turn) && (piece & 7) == Piece.lion) {
                     return true;
                 }
             }
@@ -532,55 +500,67 @@ Board.prototype = {
         return false;
     },
 
-    // posにある駒に効いているturnの駒があるかどうか
-    getSphereCount: function () {
-        var row, col, turn;
-        if (arguments.length == 2) {
-            row = arguments[0].row;
-            col = arguments[0].col;
-            turn = arguments[1];
-        } else if (arguments.length == 3) {
-            row = arguments[0];
-            col = arguments[1];
-            turn = arguments[2];
-        }
-        return this.sphere[turn][(row << 2) + col];
-    },
     evaluate: function () {
         var ret = 0;
         var data = this.data;
-        var sp0 = this.sphere[0];
-        var sp1 = this.sphere[1];
+        var sp = this.sphere;
+        var sp0 = sp[0];
+        var sp1 = sp[1];
+        var evaluateTable = Piece.evaluateTable;
+        var getTurn = Piece.turn;
+        var invert = PlayerTurn.invert;
         // 盤上の駒の価値
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
-                var piece = data[(r << 2) + c];
+                var pos = (r << 2) + c;
+                var piece = data[pos];
                 if (piece > 0) {
-                    var myTurn = Piece.turn(piece);
-                    var enemyTurn = PlayerTurn.invert(myTurn);
-                    var val = Piece.evaluate(piece, r, c);
+                    var type = piece & 7;
+                    var myTurn = getTurn(piece);
+                    var enemyTurn = invert(myTurn);
+                    var value = evaluateTable[piece];
+
+                    switch (type) {
+                        case Piece.lion:
+                            // トライ加点
+                            if (myTurn == 0) {
+                                switch (r) {
+                                    case 0: value += 50; break;
+                                    case 1: value += 5; break;
+                                    case 2: value -= 2; break;
+                                }
+                            }
+                            else {
+                                switch (r) {
+                                    case 3: value += 50; break;
+                                    case 2: value += 5; break;
+                                    case 1: value -= 2; break;
+                                }
+                            }
+                            break;
+                    }
 
                     // 駒の効き具合を加算
-                    var es = this.getSphereCount(r, c, enemyTurn) * 1;
-                    var ms = this.getSphereCount(r, c, myTurn) * 1;
-                    val = val + ms - es;
+                    var es = sp[enemyTurn][pos];
+                    var ms = sp[myTurn][pos];
+                    value = value + ms - es;
 
-                    if (Piece.isCom(piece)) {
-                        val *= -1;
+                    if (piece >= 16) {
+                        value *= -1;
                     }
-                    ret += val;
+                    ret += value;
                 }
-                ret = ret + sp0[(r << 2) + c] - sp1[(r << 2) + c];
+                ret = ret + sp0[pos] - sp1[pos];
             }
         }
         // 手駒の価値
         var hand = this.hand;
         var i;
         for (i = 0; i < hand[0].length; i++) {
-            ret += Piece.evaluate(hand[0][i]);
+            ret += evaluateTable[hand[0][i]];
         }
         for (i = 0; i < hand[1].length; i++) {
-            ret -= Piece.evaluate(hand[1][i]);
+            ret -= evaluateTable[hand[1][i]];
         }
         return ret;
     },
@@ -682,20 +662,27 @@ AIEngine.prototype = {
 
     getMoves: function (board, turn) {
         var ret = [];
-
         var data = board.data;
+        var isEnemy = Piece.isEnemy;
+
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
-                var piece = data[(r << 2) + c];
-                if (Piece.isSelf(piece, turn)) {
-                    var pos = new BoardPosition(r, c);
-                    Piece.eachMovement(piece, function (dr, dc) {
-                        var aroundPos = new BoardPosition(r + dr, c + dc);
-                        var aroundCell = data[(aroundPos.row << 2) + aroundPos.col];
-                        if (aroundCell == Piece.empty || Piece.isEnemy(aroundCell, turn)) {
-                            ret.push(new Move(pos, aroundPos));
+                var posVal = (r << 2) + c;
+                var piece = data[posVal];
+                var isSelf = (turn == 0) ? (piece < 16) : (piece >= 16);
+                if (isSelf) {
+                    var movablePosDiff = Piece.movablePosDiff[piece];
+                    for (var i = movablePosDiff.length-1; i>=0; i--) {
+                        var newPosVal = posVal + movablePosDiff[i];
+                        var aroundCell = data[newPosVal];
+                        if(aroundCell == null)
+                            continue;
+                        if (aroundCell == 0 || isEnemy(aroundCell, turn)) {
+                            var bpCurrent = BoardPosition.obj[posVal]
+                            var bpNext = BoardPosition.obj[newPosVal];
+                            ret[ret.length] = new Move(bpCurrent, bpNext);
                         }
-                    });
+                    }                    
                 }
             }
         }
@@ -705,7 +692,7 @@ AIEngine.prototype = {
     getMoveCandidates: function (board) {
         var candidates = [];
         var moves = this.getMoves(board, board.turn);
-        for (var i = 0; i < moves.length; i++) {
+        for (var i = moves.length - 1; i >= 0; i--) {
             var c = AICandidate.create(AICandidateType.move, moves[i], board, board.turn);
             candidates.push(c);
         }
@@ -715,10 +702,10 @@ AIEngine.prototype = {
         var ret = [];
         var hand = board.hand;
         var placeablePositions = board.getPlaceablePositions();
-        for (var i = 0; i < placeablePositions.length; i++) {
+        for (var i = placeablePositions.length - 1; i >= 0; i--) {
             // 置ける手を全部列挙
             var myhand = hand[turn];
-            for (var j = 0; j < myhand.length; j++) {
+            for (var j = myhand.length - 1; j >= 0; j--) {
                 var p = new Place(placeablePositions[i], myhand[j]);
                 ret.push(p);
             }
@@ -740,7 +727,7 @@ AIEngine.prototype = {
         for (var i = 0; i < candidates.length; i++) {
             var toPos = candidates[i].content.toPos;
             var piece = data[(toPos.row << 2) + toPos.col];
-            if (Piece.isEnemy(piece, turn) && Piece.type(piece) == Piece.lion) {
+            if (Piece.isEnemy(piece, turn) && (piece & 7) == Piece.lion) {
                 return candidates[i];
             }
         }
@@ -760,7 +747,7 @@ AIEngine.prototype = {
             for (var j = 0; j < enemyMovements.length; j++) {
                 var toPos = enemyMovements[j].toPos;
                 var piece = nextBoard.data[(toPos.row << 2) + toPos.col];
-                if (Piece.isSelf(piece, myTurn) && Piece.type(piece) == Piece.lion) {
+                if (Piece.isSelf(piece, myTurn) && (piece & 7) == Piece.lion) {
                     candidates.splice(i, 1);
                     if (candidates.length == 1) {
                         return;
@@ -786,7 +773,7 @@ AIEngine.prototype = {
         // 王手がかっていないなら、駒を置く手も考える
         if (!board.isChecked(board.turn)) {
             // 置ける手を全部列挙し追加
-            [ ].push.apply(candidates, this.getPlaceCandidates(board));
+            (new Array).push.apply(candidates, this.getPlaceCandidates(board));
         }
         return candidates;
     },
@@ -803,7 +790,7 @@ AIEngine.prototype = {
 
         // 最大の評価点のものを選ぶ
         var maxVal = -0xffff;
-        var maxCandidates = [];
+        var maxCandidates = new Array;
 
         for (var i = 0; i < candidates.length; i++) {
             // 次の局面について、maxでさらに先読み
@@ -850,7 +837,6 @@ AIEngine.prototype = {
                     break;
             }
         }
-
         return maxVal;
     },
 
