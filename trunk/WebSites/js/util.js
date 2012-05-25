@@ -79,9 +79,18 @@ Array.prototype.removeAt = function (index) {
     return this;
 };
 Array.prototype.remove = function (value) {
-    for (var i = 0; i < this.length; i++) {
+    for (var i = this.length - 1; i >= 0; i--) {
         if (this[i] === value) {
             this.splice(i, 1);
+        }
+    }
+    return this;
+};
+Array.prototype.removeOne = function (value) {
+    for (var i = this.length - 1; i >= 0; i--) {
+        if (this[i] === value) {
+            this.splice(i, 1);
+            break;
         }
     }
     return this;
