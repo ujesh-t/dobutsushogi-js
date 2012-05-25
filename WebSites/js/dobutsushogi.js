@@ -90,9 +90,10 @@ Piece.movablePosDiff[Piece.empty] = new Array;
         Piece.movablePosDiff[com] = new Array;
         for (var r = 0; r <= 2; r++) {
             for (var c = 0; c <= 2; c++) {
-                if (m[man][r * 3 + c])
+                var idx = r * 3 + c;
+                if (m[man][idx])
                     Piece.movablePosDiff[man].push(((r - 1) << 2) + (c - 1));
-                if (m[com][r * 3 + c])
+                if (m[com][idx])
                     Piece.movablePosDiff[com].push(((r - 1) << 2) + (c - 1));
             }
         }
@@ -177,6 +178,10 @@ Piece.evaluateTable = new Array;
     e[Piece.lion0] = e[Piece.lion1] = 100;
 })();
 
+Piece.tryBonus = new Array;
+Piece.tryBonus[0] = [50, 5, -2, 0];
+Piece.tryBonus[1] = (Piece.tryBonus[0]).concat().reverse();
+
 Piece.toString = function (piece) {
     switch (Piece.type(piece)) {
         case Piece.hiyoko: return "H";
@@ -216,7 +221,7 @@ BoardPosition.prototype = {
         }
     },
     isValid: function () {
-        return this.row >= 0 && this.row < 4 && this.col >= 0 && this.col < 3;
+        return this.row >= 0 && this.col >= 0 && this.row < 4 && this.col < 3;
     },
     toIndex: function () {
         return (this.row << 2) + this.col;
@@ -236,34 +241,17 @@ BoardPosition.obj = new Array(4 * 3);
 })();
 
 
-// ----------------------------------------------------------------------------------------------
-// PieceChange
-// ----------------------------------------------------------------------------------------------
-var PieceChange = function (got, moved) {
-    this.got = got;
-    this.moved = moved;
-};
 
 // ----------------------------------------------------------------------------------------------
 // Board
 // ----------------------------------------------------------------------------------------------
-var Board = function () {
-    this.data = arguments[0];
-    this.hand = arguments[1];
-    this.turn = arguments[2];
-    this.sphere = null;
-    switch (arguments.length) {
-        case 4:
-            this.sphere = arguments[3];
-            break;
-        case 3:
-            this.refreshSpheres();
-            break;
-        default:
-            alert("fatal error at Board constructor");
-    }
+var Board = function (data, lionPos, hand, turn, sphere) {
+    this.data = data;
+    this.lionPos = lionPos;
+    this.hand = hand;
+    this.turn = turn;
+    this.sphere = sphere;
 };
-// Initial board states
 Board.createDefaultBoard = function () {
     var data = [
         Piece.kirin1, Piece.lion1, Piece.zo1, void 0,
@@ -271,33 +259,13 @@ Board.createDefaultBoard = function () {
         Piece.empty, Piece.hiyoko0, Piece.empty, void 0,
         Piece.zo0, Piece.lion0, Piece.kirin0, void 0
     ];
+    var lionPos = [(3 << 2) + 1, (0 << 2) + 1];
     var hand = [[], []];
     var turn = PlayerTurn.man;
-    return new Board(data, hand, turn);
+    var board = new Board(data, lionPos, hand, turn, null);
+    board.refreshSpheres();
+    return board;
 };
-Board.createTestBoard1 = function () {
-    var data = [
-        Piece.empty, Piece.lion1, Piece.empty, void 0,
-        Piece.empty, Piece.empty, Piece.empty, void 0,
-        Piece.empty, Piece.empty, Piece.empty, void 0,
-        Piece.zo0, Piece.lion0, Piece.kirin0, void 0
-    ];
-    var hand = [[], []];
-    var turn = PlayerTurn.man;
-    return new Board(data, hand, turn);
-};
-Board.createTestBoard2 = function () {
-    var data = [
-        Piece.empty, Piece.empty, Piece.empty, void 0,
-        Piece.empty, Piece.empty, Piece.lion0, void 0,
-        Piece.lion1, Piece.hiyoko1, Piece.empty, void 0,
-        Piece.empty, Piece.empty, Piece.empty, void 0
-    ];
-    var hand = [[], []];
-    var turn = PlayerTurn.man;
-    return new Board(data, hand, turn);
-};
-
 
 
 Board.prototype = {
@@ -330,20 +298,21 @@ Board.prototype = {
 
     clone: function () {
         var data = this.data.slice(0, 16);
+        var lionPos = this.lionPos.slice(0);
         var hand0 = this.hand[0].slice(0);
         var hand1 = this.hand[1].slice(0);
         var turn = this.turn;
         var sphere0 = this.sphere[0].slice(0, 16);
         var sphere1 = this.sphere[1].slice(0, 16);
-        return new Board(data, [hand0, hand1], turn, [sphere0, sphere1]);
+        return new Board(data, lionPos, [hand0, hand1], turn, [sphere0, sphere1]);
     },
 
     move: function (beforePos, afterPos, turn) {
         var data = this.data;
-        var beforeVal = (beforePos.row << 2) + beforePos.col;
-        var afterVal = (afterPos.row << 2) + afterPos.col;
-        var movingPiece = data[beforeVal];  // 移動する駒
-        var currentPiece = Piece.demote(data[afterVal]); // 今ある駒
+        var beforePosVal = (beforePos.row << 2) + beforePos.col;
+        var afterPosVal = (afterPos.row << 2) + afterPos.col;
+        var movingPiece = data[beforePosVal];  // 移動する駒
+        var currentPiece = Piece.demote(data[afterPosVal]); // 今ある駒
         var sp;
         var mpd;
         var i;
@@ -352,37 +321,46 @@ Board.prototype = {
             movingPiece = Piece.promote(movingPiece);
         }
         // 移動
-        data[afterVal] = movingPiece;
-        data[beforeVal] = Piece.empty;
+        data[afterPosVal] = movingPiece;
+        data[beforePosVal] = 0;
+        // 自分のライオン位置更新
+        if ((movingPiece & 7) == Piece.lion) {
+            this.lionPos[turn] = afterPosVal;
+        }
         // 敵の駒を取っている
-        if (currentPiece != Piece.empty) {
+        if (currentPiece != 0) {
             // 取られた敵の勢力圏変更
             sp = this.sphere[(turn + 1) & 1];
             mpd = Piece.movablePosDiff[currentPiece];
             for (i = mpd.length - 1; i >= 0; i--) {
-                sp[afterVal + mpd[i]]--;
+                sp[afterPosVal + mpd[i]]--;
+            }
+            // ライオンを取った場合は変な位置にしとく
+            if ((currentPiece & 7) == Piece.lion) {
+                this.lionPos[(turn + 1) & 1] = -1;
             }
             // 成りを戻し、味方にconvertして手駒追加
-            currentPiece = Piece.convert(Piece.demote(currentPiece));
+            currentPiece = Piece.convert(currentPiece);
             this.hand[turn].push(currentPiece);
         }
         // 移動前の箇所から勢力圏を消し、新しい場所に設定
         sp = this.sphere[turn];
         mpd = Piece.movablePosDiff[movingPiece];
         for (i = mpd.length - 1; i >= 0; i--) {
-            sp[beforeVal + mpd[i]]--;
-            sp[afterVal + mpd[i]]++;
+            sp[beforePosVal + mpd[i]]--;
+            sp[afterPosVal + mpd[i]]++;
         }
-        return new PieceChange(currentPiece, movingPiece);
+        // 取ったpieceを返す
+        return currentPiece;
     },
     place: function (pos, piece, turn) {
         var posVal = (pos.row << 2) + pos.col;
         this.data[posVal] = piece;
-        this.hand[turn].remove(piece);
+        this.hand[turn].removeOne(piece);
         // 影響度を加算
         var sp = this.sphere[turn];
         var mpd = Piece.movablePosDiff[piece];
-        for (i = mpd.length - 1; i >= 0; i--) {
+        for (var i = mpd.length - 1; i >= 0; i--) {
             sp[posVal + mpd]++;
         }
     },
@@ -457,21 +435,10 @@ Board.prototype = {
     },
 
     isChecked: function (turn) {
-        var data = this.data;
+        var lionPos = this.lionPos[turn];
         var enemyTurn = (turn + 1) & 1;
-        var enemyPiecePositions = this.getPiecePositions(enemyTurn);
-        for (var i = 0; i < enemyPiecePositions.length; i++) {
-            var enemyMovablePositions = this.getMovablePositions(enemyPiecePositions[i], enemyTurn);
-            for (var j = 0; j < enemyMovablePositions.length; j++) {
-                var pos = enemyMovablePositions[j];
-                var piece = data[(pos.row << 2) + pos.col];
-                var isSelf = (turn == 0) ? piece < 16 : piece >= 16;
-                if (isSelf && (piece & 7) == Piece.lion) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        var enemySphere = this.sphere[enemyTurn];
+        return (enemySphere[lionPos] > 0);
     },
 
     isSelfPiece: function (pos) {
@@ -480,29 +447,13 @@ Board.prototype = {
     },
 
     isDeadLion: function (turn) {
-        var myLion = Piece.create(Piece.lion, turn);
-        var data = this.data;
-        for (var r = 0; r < 4; r++) {
-            for (var c = 0; c < 3; c++) {
-                var piece = data[(r << 2) + c];
-                if (piece == myLion) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        var lionPos = this.lionPos[turn];
+        return (lionPos < 0);
     },
     triesLion: function (turn) {
-        var myLion = Piece.create(Piece.lion, turn);
-        var r = (turn == PlayerTurn.man) ? 0 : 3;
-        var data = this.data;
-        for (var c = 0; c < 3; c++) {
-            var piece = data[(r << 2) + c];
-            if (piece == myLion) {
-                return true;
-            }
-        }
-        return false;
+        var lionPos = this.lionPos[turn];
+        var r = (turn == 0) ? 0 : 3;
+        return (lionPos >= 0) && ((lionPos >> 2) == r);
     },
 
     evaluate: function () {
@@ -512,7 +463,7 @@ Board.prototype = {
         var sp0 = sp[0];
         var sp1 = sp[1];
         var evaluateTable = Piece.evaluateTable;
-        var getTurn = Piece.turn;
+
         // 盤上の駒の価値
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
@@ -525,22 +476,9 @@ Board.prototype = {
                     var value = evaluateTable[piece];
 
                     switch (type) {
-                        case Piece.lion:
+                        case 5: // lion
                             // トライ加点
-                            if (pieceTurn == 0) {
-                                switch (r) {
-                                    case 0: value += 50; break;
-                                    case 1: value += 5; break;
-                                    case 2: value -= 2; break;
-                                }
-                            }
-                            else {
-                                switch (r) {
-                                    case 3: value += 50; break;
-                                    case 2: value += 5; break;
-                                    case 1: value -= 2; break;
-                                }
-                            }
+                            value += Piece.tryBonus[pieceTurn][r];
                             break;
                     }
 
@@ -549,7 +487,7 @@ Board.prototype = {
                     var ps = sp[pieceTurn][pos];
                     value = value + ps - es;
 
-                    if (piece >= 16) {
+                    if (pieceTurn == 1) {
                         value *= -1;
                     }
                     ret += value;
@@ -628,7 +566,7 @@ var AICandidate = function (type, content, board, nextBoard) {
 };
 AICandidate.create = function (type, content, currentBoard, turn) {
     var nextBoard = currentBoard.clone();
-    nextBoard.toggleTurn();
+    nextBoard.turn = (nextBoard.turn + 1) & 1;
     switch (type) {
         case AICandidateType.move:
             nextBoard.move(content.fromPos, content.toPos, turn);
@@ -676,10 +614,10 @@ AIEngine.prototype = {
                 var isSelf = (turn == 0) ? (piece < 16) : (piece >= 16);
                 if (isSelf) {
                     var movablePosDiff = Piece.movablePosDiff[piece];
-                    for (var i = movablePosDiff.length-1; i>=0; i--) {
+                    for (var i = movablePosDiff.length - 1; i >= 0; i--) {
                         var newPosVal = posVal + movablePosDiff[i];
                         var aroundCell = data[newPosVal];
-                        if(aroundCell == null)
+                        if (aroundCell == null)
                             continue;
                         // 何も無いマスか、または敵がいるときは、動ける
                         if (aroundCell == 0 || ((turn == 0) ? aroundCell >= 16 : aroundCell < 16)) {
@@ -687,7 +625,7 @@ AIEngine.prototype = {
                             var bpNext = BoardPosition.obj[newPosVal];
                             ret[ret.length] = new Move(bpCurrent, bpNext);
                         }
-                    }     
+                    }
                 }
             }
         }
@@ -729,10 +667,11 @@ AIEngine.prototype = {
 
     findCatchingLionMove: function (candidates, turn) {
         var data = this.board.data;
-        for (var i = 0; i < candidates.length; i++) {
+        var enemyLion = Piece.create(Piece.lion, ((turn + 1) & 1));
+        for (var i = candidates.length - 1; i >= 0; i--) {
             var toPos = candidates[i].content.toPos;
             var piece = data[(toPos.row << 2) + toPos.col];
-            if (Piece.isEnemy(piece, turn) && (piece & 7) == Piece.lion) {
+            if (piece == enemyLion) {
                 return candidates[i];
             }
         }
@@ -744,21 +683,15 @@ AIEngine.prototype = {
             return;
         }
         var myTurn = candidates[0].board.turn;
-        for (var i = candidates.length - 1; i >= 0; i--) {
-            // 今のcandidatesのようにためしに動かしてみて、取られるかどうか
+        var enemyTurn = PlayerTurn.invert(myTurn);
+        var myLion = Piece.create(Piece.lion, myTurn);
+        for (var i = candidates.length - 1; candidates.length > 1 && i >= 0; i--) {
+            // 敵の勢力圏に自ライオンが入ってたらアウト
             var nextBoard = candidates[i].nextBoard;
-            // 敵があらゆる手でライオンを取れないかチェック
-            var enemyMovements = this.getMoves(nextBoard, nextBoard.turn);
-            for (var j = 0; j < enemyMovements.length; j++) {
-                var toPos = enemyMovements[j].toPos;
-                var piece = nextBoard.data[(toPos.row << 2) + toPos.col];
-                if (Piece.isSelf(piece, myTurn) && (piece & 7) == Piece.lion) {
-                    candidates.splice(i, 1);
-                    if (candidates.length == 1) {
-                        return;
-                    }
-                    break;
-                }
+            var sphere = nextBoard.sphere[enemyTurn];
+            var lionPos = nextBoard.lionPos[myTurn];
+            if (sphere[lionPos] > 0) {
+                candidates.splice(i, 1);
             }
         }
     },
@@ -772,7 +705,7 @@ AIEngine.prototype = {
         if (catchingLionmove != null)
             return [catchingLionmove];
 
-        // 自分から死に行く手は消す
+        // 自分から死にに行く手は消す
         this.filterSuicide(candidates);
 
         // 王手がかっていないなら、駒を置く手も考える
@@ -797,7 +730,7 @@ AIEngine.prototype = {
         var maxVal = -0xffff;
         var maxCandidates = new Array;
 
-        for (var i = 0; i < candidates.length; i++) {
+        for (var i = candidates.length - 1; i >= 0; i--) {
             // 次の局面について、maxでさらに先読み
             var e = -this.negaMax(candidates[i].nextBoard, depth - 1, null);
             if (maxVal < e) {
@@ -807,90 +740,14 @@ AIEngine.prototype = {
             if (maxVal == e) {
                 maxCandidates.push(candidates[i]);
             }
-            if (outCandidate) {
-                var a = maxCandidates.getRandomItem();
-                outCandidate.replace(maxCandidates.getRandomItem());
-            }
+        }
+        if (outCandidate) {
+            outCandidate.replace(maxCandidates.getRandomItem());
         }
         return maxVal;
-    },
-
-    negaAlphaBeta: function (board, depth, alpha, beta, outCandidate) {
-        // 最大深さに達していれば再帰終わり
-        if (depth <= 0) {
-            return (board.turn == PlayerTurn.man) ? board.evaluate() : -board.evaluate();
-        }
-        this.nodeNum++;
-
-        // 動かせる手を全部列挙
-        var candidates = this.getProperCandidates(board);
-
-        // 最大の評価点のものを選ぶ
-        var maxVal = -0xffff;
-        for (var i = 0; i < candidates.length; i++) {
-            // 次の局面について先読み
-            var e = -this.negaAlphaBeta(candidates[i].nextBoard, depth - 1, -beta, -alpha, null);
-            if (maxVal < e) {
-                maxVal = e;
-                if (alpha < e) {
-                    alpha = e;
-                }
-                if (outCandidate) {
-                    outCandidate.replace(candidates[i]);
-                }
-                if (e >= beta)
-                    break;
-            }
-        }
-        return maxVal;
-    },
-
-    monteCarlo: function (board, outCandidate) {
-        var i, j;
-
-        // 動かせる手を全部列挙
-        var candidates = this.getProperCandidates(board);
-
-        // 勝負数
-        var point = new Array(candidates.length);
-        for (i = 0; i < point.length; i++) {
-            point[i] = 0;
-        }
-
-        // ランダムに指しまくって、プレイアウト時に一番勝てたやつにする
-        for (i = 0; i < candidates.length; i++) {
-            for (j = 0; j < 30; j++) {
-                point[i] += this.playout(candidates[i].nextBoard, this.board.turn);
-            }
-        }
-
-        var ret = [];
-        var max = -1;
-        for (i = 0; i < point.length; i++) {
-            if (max < point[i]) {
-                max = point[i];
-            }
-            if (max == point[i]) {
-                ret.push(candidates[i]);
-            }
-        }
-
-        return ret[MT.nextInt(0, ret.length)];
-    },
-
-    playout: function (board, turn) {
-        var enemyTurn = (turn + 1) & 1;
-        if (board.isDeadLion(enemyTurn) || board.triesLion(turn))
-            return 1;
-        if (board.isDeadLion(turn) || board.triesLion(enemyTurn))
-            return 0;
-
-        // 動かせる手を全部列挙
-        var candidates = this.getProperCandidates(board);
-        return this.playout(candidates[MT.nextInt(0, candidates.length)].nextBoard, turn);
     }
-
 };
+
 
 var AIEngine_Random = function (board) {
     this.board = board;
@@ -904,6 +761,7 @@ AIEngine_Random.prototype.think = function () {
     return candidates.getRandomItem();
 };
 
+
 var AIEngine_Simple = function (board) {
     this.board = board;
     this.nodeNum = 0;
@@ -915,6 +773,7 @@ AIEngine_Simple.prototype.think = function () {
     this.negaMax(this.board, 1, c);
     return c;
 };
+
 
 var AIEngine_NegaMax = function (board) {
     this.board = board;
@@ -928,6 +787,7 @@ AIEngine_NegaMax.prototype.think = function () {
     return c;
 };
 
+
 var AIEngine_NegaAlphaBeta = function (board) {
     this.board = board;
     this.nodeNum = 0;
@@ -938,6 +798,37 @@ AIEngine_NegaAlphaBeta.prototype.think = function () {
     this.negaAlphaBeta(this.board, 5, -0xffff, 0xffff, c);
     return c;
 };
+AIEngine_NegaAlphaBeta.prototype.negaAlphaBeta = function (board, depth, alpha, beta, outCandidate) {
+    // 最大深さに達していれば再帰終わり
+    if (depth <= 0) {
+        return (board.turn == 0) ? board.evaluate() : -board.evaluate();
+    }
+    this.nodeNum++;
+
+    // 動かせる手を全部列挙
+    var candidates = this.getProperCandidates(board);
+
+    // 最大の評価点のものを選ぶ
+    var maxVal = -0xffff;
+    var maxIndex = 0;
+    for (var i = candidates.length - 1; i >= 0; i--) {
+        // 次の局面について先読み
+        var e = -this.negaAlphaBeta(candidates[i].nextBoard, depth - 1, -beta, -alpha, null);
+        if (maxVal < e) {
+            maxVal = e;
+            maxIndex = i;
+            if (alpha < e) {
+                alpha = e;
+            }
+            if (e >= beta)
+                break;
+        }
+    }
+    if (outCandidate) {
+        outCandidate.replace(candidates[maxIndex]);
+    }
+    return maxVal;
+};
 
 var AIEngine_MonteCarlo = function (board) {
     this.board = board;
@@ -946,4 +837,50 @@ var AIEngine_MonteCarlo = function (board) {
 AIEngine_MonteCarlo.prototype = new AIEngine(null);
 AIEngine_MonteCarlo.prototype.think = function () {
     return this.monteCarlo(this.board);
+};
+AIEngine_MonteCarlo.prototype.monteCarlo = function (board, outCandidate) {
+    var i, j;
+
+    // 動かせる手を全部列挙
+    var candidates = this.getProperCandidates(board);
+
+    // 勝負数
+    var point = new Array(candidates.length);
+    for (i = 0; i < point.length; i++) {
+        point[i] = 0;
+    }
+
+    // ランダムに指しまくって、プレイアウト時に一番勝てたやつにする
+    for (i = candidates.length - 1; i >= 0; i--) {
+        for (j = 0; j < 20; j++) {
+            point[i] += this.playout(candidates[i].nextBoard, this.board.turn, 100);
+        }
+    }
+
+    var ret = [];
+    var max = -1;
+    for (i = 0; i < point.length; i++) {
+        if (max < point[i]) {
+            max = point[i];
+        }
+        if (max == point[i]) {
+            ret.push(candidates[i]);
+        }
+    }
+
+    return ret[MT.nextInt(0, ret.length)];
+};
+
+AIEngine_MonteCarlo.prototype.playout= function (board, turn, depth) {
+    if (depth-- <= 0)
+        return 0;
+    var enemyTurn = (turn + 1) & 1;
+    if (board.isDeadLion(enemyTurn) || board.triesLion(turn))
+        return 1;
+    if (board.isDeadLion(turn) || board.triesLion(enemyTurn))
+        return 0;
+
+    // 動かせる手を全部列挙
+    var candidates = this.getProperCandidates(board);
+    return this.playout(candidates[MT.nextInt(0, candidates.length)].nextBoard, turn, depth);
 };
