@@ -209,6 +209,11 @@ BoardPosition.fromCoordinate = function (pos) {
     var col = Math.floor((pos.left + 40) / 80);
     return new BoardPosition(row, col);
 };
+BoardPosition.fromIndex = function (idx) {
+    var row = idx >> 2;
+    var col = idx & 3;
+    return new BoardPosition(row, col);
+};
 
 BoardPosition.prototype = {
     equals: function (obj) {
@@ -216,13 +221,10 @@ BoardPosition.prototype = {
     },
     isPromotable: function (turn) {
         switch (turn) {
-            case PlayerTurn.man: return this.row == 0;
-            case PlayerTurn.com: return this.row == 3;
+            case 0: return this.row == 0;
+            case 1: return this.row == 3;
         }
-    },
-    isValid: function () {
-        return this.row >= 0 && this.col >= 0 && this.row < 4 && this.col < 3;
-    },
+    },    
     toIndex: function () {
         return (this.row << 2) + this.col;
     },
@@ -270,10 +272,16 @@ Board.createDefaultBoard = function () {
 
 Board.prototype = {
     get: function (pos) {
-        return this.data[(pos.row << 2) + pos.col];
+        if(typeof pos == "number")
+            return this.data[pos];
+        else
+            return this.data[(pos.row << 2) + pos.col];  
     },
     set: function (pos, value) {
-        this.data[(pos.row << 2) + pos.col] = value;
+        if(typeof pos == "number")
+            return this.data[pos] = value;
+        else
+            this.data[(pos.row << 2) + pos.col] = value;
     },
 
     refreshSpheres: function () {
@@ -307,17 +315,17 @@ Board.prototype = {
         return new Board(data, lionPos, [hand0, hand1], turn, [sphere0, sphere1]);
     },
 
-    move: function (beforePos, afterPos, turn) {
+    move: function (beforePosVal, afterPosVal, turn) {
+
         var data = this.data;
-        var beforePosVal = (beforePos.row << 2) + beforePos.col;
-        var afterPosVal = (afterPos.row << 2) + afterPos.col;
         var movingPiece = data[beforePosVal];  // 移動する駒
         var currentPiece = Piece.demote(data[afterPosVal]); // 今ある駒
-        var sp;
-        var mpd;
+        var sp, mpd;
         var i;
+
         // 成る
-        if (afterPos.isPromotable(turn)) {
+        var isPromotable = (turn == 0) ? ((afterPosVal >> 2) == 0) : ((afterPosVal >> 2) == 3);
+        if (isPromotable) {
             movingPiece = Piece.promote(movingPiece);
         }
         // 移動
@@ -353,8 +361,7 @@ Board.prototype = {
         // 取ったpieceを返す
         return currentPiece;
     },
-    place: function (pos, piece, turn) {
-        var posVal = (pos.row << 2) + pos.col;
+    place: function (posVal, piece, turn) {
         this.data[posVal] = piece;
         this.hand[turn].removeOne(piece);
         // 影響度を加算
@@ -388,20 +395,19 @@ Board.prototype = {
         var data = this.data;
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
-                var pos = (r << 2) + c;
-                var piece = data[pos];
+                var posVal = (r << 2) + c;
+                var piece = data[posVal];
                 var isSelf = (turn == 0) ? piece < 16 : piece >= 16;
                 if (isSelf) {
-                    result[result.length] = BoardPosition.obj[pos];
+                    result[result.length] = posVal;
                 }
             }
         }
         return result;
     },
 
-    getMovablePositions: function (pos, turn) {
+    getMovablePositions: function (posVal, turn) {
         var result = [];
-        var posVal = (pos.row << 2) + pos.col;
         var data = this.data;
         var piece = data[posVal];
         var isEnemy = Piece.isEnemy;
@@ -413,7 +419,7 @@ Board.prototype = {
             if (aroundCell == null)
                 continue;
             if (aroundCell == 0 || isEnemy(aroundCell, turn)) {
-                result.push(BoardPosition.obj[newPosVal]);
+                result[result.length] = newPosVal;
             }
         }
 
@@ -427,7 +433,7 @@ Board.prototype = {
             for (var c = 0; c < 3; c++) {
                 var pos = (r << 2) + c;
                 if (data[pos] == 0) {
-                    result.push(BoardPosition.obj[pos]);
+                    result.push(pos);
                 }
             }
         }
@@ -605,7 +611,6 @@ AIEngine.prototype = {
     getMoves: function (board, turn) {
         var ret = [];
         var data = board.data;
-        var isEnemy = Piece.isEnemy;
 
         for (var r = 0; r < 4; r++) {
             for (var c = 0; c < 3; c++) {
@@ -620,10 +625,9 @@ AIEngine.prototype = {
                         if (aroundCell == null)
                             continue;
                         // 何も無いマスか、または敵がいるときは、動ける
-                        if (aroundCell == 0 || ((turn == 0) ? aroundCell >= 16 : aroundCell < 16)) {
-                            var bpCurrent = BoardPosition.obj[posVal]
-                            var bpNext = BoardPosition.obj[newPosVal];
-                            ret[ret.length] = new Move(bpCurrent, bpNext);
+                        if (aroundCell == 0 || 
+                            ((turn == 0) ? aroundCell >= 16 : aroundCell < 16)) {
+                            ret[ret.length] = new Move(posVal, newPosVal);
                         }
                     }
                 }
@@ -669,8 +673,7 @@ AIEngine.prototype = {
         var data = this.board.data;
         var enemyLion = Piece.create(Piece.lion, ((turn + 1) & 1));
         for (var i = candidates.length - 1; i >= 0; i--) {
-            var toPos = candidates[i].content.toPos;
-            var piece = data[(toPos.row << 2) + toPos.col];
+            var piece = data[candidates[i].content.toPos];
             if (piece == enemyLion) {
                 return candidates[i];
             }
