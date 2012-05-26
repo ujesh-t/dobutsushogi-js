@@ -220,27 +220,29 @@
                 // いける場所を表示
                 initializePieceFlags();
                 getCellAt(pos).addClass('cell-active');
-                _movablePositions = _board.getMovablePositions(pos, _board.turn);
+                _movablePositions = _board.getMovablePositions(pos.toIndex(), _board.turn);
                 displayMovablePositions(_movablePositions);
                 _beforePos = pos;
             };
             this.isReadyToPlace = function (pos) {
-                return (_placeablePositions.length > 0) && (_placeablePositions.myIndexOf(pos) >= 0);
+                return (_placeablePositions.length > 0) && 
+                    (jQuery.inArray(pos.toIndex(), _placeablePositions) >= 0);
             };
             this.beginPlacing = function (pos) {
                 _uiDisabled = true;
-                var place = new Place(pos, _placingPiece.value, _placingPiece.index);
+                var place = new Place(pos.toIndex(), _placingPiece.value, _placingPiece.index);
                 var candidate = new AICandidate(AICandidateType.place, place, _board, null);
                 clearMovablePositions();
                 initializePieceFlags();
                 return candidate;
             };
             this.isReadyToMove = function (pos) {
-                return (_movablePositions.length > 0) && (_movablePositions.myIndexOf(pos) >= 0);
+                return (_movablePositions.length > 0) && 
+                (jQuery.inArray(pos.toIndex(), _movablePositions) >= 0);
             };
             this.beginMoving = function (pos) {
                 _uiDisabled = true;
-                var move = new Move(_beforePos, pos);
+                var move = new Move(_beforePos.toIndex(), pos.toIndex());
                 var candidate = new AICandidate(AICandidateType.move, move, _board, null);
                 clearMovablePositions();
                 initializePieceFlags();
@@ -399,16 +401,19 @@
                 switch (candidate.type) {
                     case AICandidateType.move:
                         var movedPiece = _board.get(c.fromPos);
+                        var bpFrom = BoardPosition.fromIndex(c.fromPos);
+                        var bpTo = BoardPosition.fromIndex(c.toPos);
                         var gotPiece = _board.move(c.fromPos, c.toPos, _board.turn);                        
                         if (gotPiece != Piece.empty) {
-                            movePieceToHand(c.toPos, gotPiece, _board.turn);
+                            movePieceToHand(bpTo, gotPiece, _board.turn);
                         }
-                        movePieceOnBoard(c.fromPos, c.toPos, movedPiece);
+                        movePieceOnBoard(bpFrom, bpTo, movedPiece);
                         break;
                     case AICandidateType.place:
                         _board.place(c.pos, c.piece, _board.turn);
                         var index = c.handIndex || jQuery.inArray(c.piece, _handPieces[_board.turn]);
-                        movePieceToBoard(index, c.pos);
+                        var bpPos = BoardPosition.fromIndex(c.pos);
+                        movePieceToBoard(index, bpPos);
                         break;
                     default:
                         error("fatal error at updateBoard [Unexpected candidate type ({0})]", candidate.type);
@@ -459,7 +464,7 @@
                 /// _movablePositionsに入っている座標をもとに、選択中の駒が進めるセルをハイライト
                 /// </summary>
                 for (var i = 0; i < _movablePositions.length; i++) {
-                    var pos = _movablePositions[i];
+                    var pos = BoardPosition.fromIndex(_movablePositions[i]);
                     getCellAt(pos).addClass('cell-movable');
                 }
             }
@@ -468,7 +473,7 @@
                 /// _placeblePositionsに入っている座標をもとに、駒を置けるセルをハイライト
                 /// </summary>
                 for (var i = 0; i < _placeablePositions.length; i++) {
-                    var pos = _placeablePositions[i];
+                    var pos = BoardPosition.fromIndex(_placeablePositions[i]);
                     getCellAt(pos).addClass('cell-placeable');
                 }
             }
