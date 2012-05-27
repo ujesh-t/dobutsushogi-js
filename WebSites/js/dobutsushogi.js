@@ -147,12 +147,12 @@ Piece.convert = function (piece) {
 };
 Piece.promote = function (piece) {
     if ((piece & 7) == 1) // hiyoko
-        return Piece.create(2, Piece.turn(piece)); // niwatori
+        return piece + 1; // niwatori
     return piece;
 };
 Piece.demote = function (piece) {
     if ((piece & 7) == 2) // niwatori
-        return Piece.create(1, Piece.turn(piece)); // hiyoko
+        return piece - 1; // hiyoko
     return piece;
 };
 Piece.eachMovement = function (piece, func) {
@@ -319,18 +319,10 @@ Board.prototype = {
 
         var data = this.data;
         var movingPiece = data[beforePosVal];  // 移動する駒
-        var currentPiece = Piece.demote(data[afterPosVal]); // 今ある駒
+        var currentPiece = data[afterPosVal]; // 今ある駒
         var sp, mpd;
         var i;
 
-        // 成る
-        var isPromotable = (turn == 0) ? ((afterPosVal >> 2) == 0) : ((afterPosVal >> 2) == 3);
-        if (isPromotable) {
-            movingPiece = Piece.promote(movingPiece);
-        }
-        // 移動
-        data[afterPosVal] = movingPiece;
-        data[beforePosVal] = 0;
         // 自分のライオン位置更新
         if ((movingPiece & 7) == Piece.lion) {
             this.lionPos[turn] = afterPosVal;
@@ -347,17 +339,38 @@ Board.prototype = {
             if ((currentPiece & 7) == Piece.lion) {
                 this.lionPos[(turn + 1) & 1] = -1;
             }
-            // 成りを戻し、味方にconvertして手駒追加
+            // 取られる駒の成りを戻す
+            if((currentPiece & 7) == 2) {
+                currentPiece--;
+            }
+            // さらに味方にconvertして、手駒追加
             currentPiece = Piece.convert(currentPiece);
             this.hand[turn].push(currentPiece);
         }
-        // 移動前の箇所から勢力圏を消し、新しい場所に設定
+
+        // 移動前の場所から勢力圏を消す
         sp = this.sphere[turn];
         mpd = Piece.movablePosDiff[movingPiece];
         for (i = mpd.length - 1; i >= 0; i--) {
             sp[beforePosVal + mpd[i]]--;
+        }
+        // 成る
+        if((movingPiece & 7) == 1){ // hiyoko
+            var isPromotable = (turn == 0) ? ((afterPosVal >> 2) == 0) : ((afterPosVal >> 2) == 3);
+            if (isPromotable) {
+                movingPiece++; // niwatori
+            }
+        }
+        // 新しい勢力圏を設定
+        mpd = Piece.movablePosDiff[movingPiece];
+        for (i = mpd.length - 1; i >= 0; i--) {
             sp[afterPosVal + mpd[i]]++;
         }
+
+        // 移動
+        data[afterPosVal] = movingPiece;
+        data[beforePosVal] = 0;
+
         // 取ったpieceを返す
         return currentPiece;
     },
@@ -368,7 +381,7 @@ Board.prototype = {
         var sp = this.sphere[turn];
         var mpd = Piece.movablePosDiff[piece];
         for (var i = mpd.length - 1; i >= 0; i--) {
-            sp[posVal + mpd]++;
+            sp[posVal + mpd[i]]++;
         }
     },
 
@@ -526,6 +539,27 @@ Board.prototype = {
             str += "\n";
         }
         return str;
+    },
+
+    sphereString: function () {
+        var sp0 = this.sphere[0];
+        var sp1 = this.sphere[1];
+        var val;
+
+        var str = " Man  |  Com \n";
+        for (var r = 0; r < 4; r++) {
+            for (var c = 0; c < 3; c++) {
+                val = sp0[(r << 2) + c];
+                str += (val > 0) ? "■" : "□";
+            }
+            str += "｜";
+            for (var c = 0; c < 3; c++) {
+                val = sp1[(r << 2) + c];
+                str += (val > 0) ? "■" : "□";
+            }
+            str += "\n";
+        }
+        return str;
     }
 };
 
@@ -559,31 +593,31 @@ Place.prototype = {
 };
 
 // ----------------------------------------------------------------------------------------------
-// AICandidate
+// Action
 // ----------------------------------------------------------------------------------------------
-var AICandidateType = {
+var ActionType = {
     empty: 0, move: 1, place: 2
 };
-var AICandidate = function (type, content, board, nextBoard) {
+var Action = function (type, content, board, nextBoard) {
     this.type = type;
     this.content = content;
     this.board = board;
     this.nextBoard = nextBoard;
 };
-AICandidate.create = function (type, content, currentBoard, turn) {
+Action.create = function (type, content, currentBoard, turn) {
     var nextBoard = currentBoard.clone();
     nextBoard.turn = (nextBoard.turn + 1) & 1;
     switch (type) {
-        case AICandidateType.move:
+        case ActionType.move:
             nextBoard.move(content.fromPos, content.toPos, turn);
             break;
-        case AICandidateType.place:
+        case ActionType.place:
             nextBoard.place(content.pos, content.piece, turn);
             break;
     }
-    return new AICandidate(type, content, currentBoard, nextBoard);
+    return new Action(type, content, currentBoard, nextBoard);
 };
-AICandidate.prototype = {
+Action.prototype = {
     replace: function (newObj) {
         this.type = newObj.type;
         this.content = newObj.content;
@@ -640,7 +674,7 @@ AIEngine.prototype = {
         var candidates = [];
         var moves = this.getMoves(board, board.turn);
         for (var i = moves.length - 1; i >= 0; i--) {
-            var c = AICandidate.create(AICandidateType.move, moves[i], board, board.turn);
+            var c = Action.create(ActionType.move, moves[i], board, board.turn);
             candidates.push(c);
         }
         return candidates;
@@ -663,7 +697,7 @@ AIEngine.prototype = {
         var candidates = [];
         var places = this.getPlaces(board, board.turn);
         for (var i = 0; i < places.length; i++) {
-            var c = AICandidate.create(AICandidateType.place, places[i], board, board.turn);
+            var c = Action.create(ActionType.place, places[i], board, board.turn);
             candidates.push(c);
         }
         return candidates;
@@ -687,7 +721,6 @@ AIEngine.prototype = {
         }
         var myTurn = candidates[0].board.turn;
         var enemyTurn = PlayerTurn.invert(myTurn);
-        var myLion = Piece.create(Piece.lion, myTurn);
         for (var i = candidates.length - 1; candidates.length > 1 && i >= 0; i--) {
             // 敵の勢力圏に自ライオンが入ってたらアウト
             var nextBoard = candidates[i].nextBoard;
@@ -772,7 +805,7 @@ var AIEngine_Simple = function (board) {
 AIEngine_Simple.prototype = new AIEngine(null);
 AIEngine_Simple.prototype.think = function () {
     // 1手だけ読み、評価値がbestのものを返す
-    var c = new AICandidate();
+    var c = new Action();
     this.negaMax(this.board, 1, c);
     return c;
 };
@@ -785,7 +818,7 @@ var AIEngine_NegaMax = function (board) {
 AIEngine_NegaMax.prototype = new AIEngine(null);
 AIEngine_NegaMax.prototype.think = function () {
     // 5手読む
-    var c = new AICandidate();
+    var c = new Action();
     this.negaMax(this.board, 5, c);
     return c;
 };
@@ -797,7 +830,7 @@ var AIEngine_NegaAlphaBeta = function (board) {
 };
 AIEngine_NegaAlphaBeta.prototype = new AIEngine(null);
 AIEngine_NegaAlphaBeta.prototype.think = function () {
-    var c = new AICandidate();
+    var c = new Action();
     this.negaAlphaBeta(this.board, 5, -0xffff, 0xffff, c);
     return c;
 };
@@ -847,9 +880,9 @@ AIEngine_MonteCarlo.prototype.monteCarlo = function (board, outCandidate) {
     // 動かせる手を全部列挙
     var candidates = this.getProperCandidates(board);
 
-    // 勝負数
+    // 勝ち負け数
     var point = new Array(candidates.length);
-    for (i = 0; i < point.length; i++) {
+    for (i = point.length - 1; i >= 0; i--) {
         point[i] = 0;
     }
 

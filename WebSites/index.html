@@ -58,20 +58,20 @@
         ManPlayer.prototype.onClickCell = function (event, elem) {
             var pos = BoardPosition.fromCoordinate(elem.position());
             var view = this.view;
-            var candidate;
+            var action;
             // 自分の駒を選択時（動かす）
             if (view.isSelectingManPiece(elem, pos)) {
                 view.selectManPiece(pos);
             }
             // 置く先が出てるとき
             else if (view.isReadyToPlace(pos)) {
-                candidate = view.beginPlacing(pos);
-                this.afterClickCallback(candidate);
+                action = view.beginPlacing(pos);
+                this.afterClickCallback(action);
             }
             // 移動先が出てるとき
             else if (view.isReadyToMove(pos)) {
-                candidate = view.beginMoving(pos);
-                this.afterClickCallback(candidate);
+                action = view.beginMoving(pos);
+                this.afterClickCallback(action);
             }
         };
 
@@ -101,9 +101,9 @@
                     ai = new AIEngine_MonteCarlo(board, PlayerTurn.com); break;
             }
 
-            var candidate = ai.think();
-            pp("先読み: " + ai.nodeNum + "局面");
-            this.afterClickCallback(candidate);
+            var action = ai.think();
+            //pp("先読み: " + ai.nodeNum + "局面");
+            this.afterClickCallback(action);
 
             //p(board.inspect());
         };
@@ -125,7 +125,7 @@
             /// </summary>
             this.index = index; // 手駒のインデックス (0~5)
             this.value = value; // 手駒の値(Piece)
-        }
+        };
 
 
 
@@ -167,7 +167,7 @@
                 _placeablePositions = [];
                 _placingPiece = null;
                 _uiDisabled = false;
-            }
+            };
             this.showPieces = function () {
                 /// <summary>
                 /// _board変数の内容に従い駒を配置
@@ -183,8 +183,41 @@
                 /// <summary>
                 /// イベントハンドラの設定
                 /// </summary>        
-                registerClickEvents();
+                var clickEvent = getClickEventName();
+                $(".piece").on(clickEvent, function (event) {
+                    onClickEvent(event, $(this));
+                    // Stop event handling in non-IE browsers:
+                    event.preventDefault();
+                    event.stopPropagation();
+                    // Stop event handling in IE
+                    return false;
+                });
+                $("#board td.cell").on(clickEvent, function (event) {
+                    onClickEvent(event, $(this));
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                });/*
+                $(document).on(clickEvent, ".piece-hand", function (event) {
+                    onClickHand(event, $(this));
+                    alert(event);
+                    // Stop event handling in non-IE browsers:
+                    event.preventDefault();
+                    event.stopPropagation();
+                    // Stop event handling in IE
+                    return false;
+                });*/
             };
+            this.unregisterClickEvents = function () {
+                /// <summary>
+                /// イベントハンドラの登録解除
+                /// </summary>
+                $("div.piece").off();
+                $("td.cell").off();
+                $("div.piece-hand").off();
+                _uiDisabled = true;
+            };
+
             this.showSettingDialog = function () {
                 /// <summary>
                 /// 対局設定ダイアログを出す
@@ -231,10 +264,10 @@
             this.beginPlacing = function (pos) {
                 _uiDisabled = true;
                 var place = new Place(pos.toIndex(), _placingPiece.value, _placingPiece.index);
-                var candidate = new AICandidate(AICandidateType.place, place, _board, null);
+                var action = new Action(ActionType.place, place, _board, null);
                 clearMovablePositions();
                 initializePieceFlags();
-                return candidate;
+                return action;
             };
             this.isReadyToMove = function (pos) {
                 return (_movablePositions.length > 0) && 
@@ -243,19 +276,12 @@
             this.beginMoving = function (pos) {
                 _uiDisabled = true;
                 var move = new Move(_beforePos.toIndex(), pos.toIndex());
-                var candidate = new AICandidate(AICandidateType.move, move, _board, null);
+                var action = new Action(ActionType.move, move, _board, null);
                 clearMovablePositions();
                 initializePieceFlags();
-                return candidate;
+                return action;
             };
-
-            this.getBoard = function () { return _board; }
-            this.getHandPieces = function () { return _handPieces; }
-
-
-            // -------------------------- private --------------------------------
-
-            function error(fmt) {
+            this.error = function (fmt) {
                 var args = [];
                 for (var i = 1; i < arguments.length; i++) {
                     if (typeof arguments[i] === "undefined")
@@ -272,38 +298,19 @@
                 var msg = eval("$.format(" + argsStr + ");");
                 alert(msg);
                 unregisterClickEvents();
-            }
+            };
+
+            this.getBoard = function () { return _board; }
+            this.getHandPieces = function () { return _handPieces; }
+
+
+            // -------------------------- private --------------------------------
+
+
             function initializePieceFlags() {
                 _beforePos = null;
                 _movablePositions = [];
                 _placeablePositions = [];
-            }
-            function registerClickEvents() {
-                /// <summary>
-                /// イベントハンドラの設定
-                /// </summary>        
-                var clickEvent = getClickEventName();
-                $(document).on(clickEvent, "div.piece", function (event) {
-                    onClickCell(event, $(this));
-                    event.preventDefault();
-                });
-                $("#board td.cell").on(clickEvent, function (event) {
-                    onClickCell(event, $(this));
-                    event.preventDefault();
-                });
-                $(document).on(clickEvent, "div.piece-hand", function (event) {
-                    onClickHand(event, $(this));
-                    event.preventDefault();
-                });
-            };
-            function unregisterClickEvents() {
-                /// <summary>
-                /// イベントハンドラの登録解除
-                /// </summary>
-                $("div.piece").off();
-                $("td.cell").off();
-                $("div.piece-hand").off();
-                _uiDisabled = true;
             }
             function getClickEventName() {
                 /// <summary>
@@ -318,16 +325,21 @@
                 return (isMobileApple || isAndroid || isWindowPhone) ? 'touchend' : 'click';
             }
 
-            function onClickCell(event, elem) {
+            function onClickEvent(event, elem) {
                 /// <summary>
-                /// cellまたはpiece要素をtapしたときの処理
+                /// cellまたはpiece要素をtapしたときの処理。
+                /// COMプレイヤも仮想的にクリックしたとみなしてこの関数を呼ぶ。
                 /// </summary>
                 if (_uiDisabled)
                     return;
-
-                _players[_board.turn].onClickCell(event, elem);
+                // 手駒クリック時(人間のみ)
+                if (elem.hasClass("piece-hand")) {
+                    onClickHand(event, elem);
+                } else {
+                    // それ以外は駒・マスのクリックとする
+                    _players[_board.turn].onClickCell(event, elem);
+                }
             }
-
             function onClickHand(event, elem) {
                 /// <summary>
                 /// 手駒(piece-hand)要素をtapしたときの処理
@@ -393,13 +405,13 @@
                 $("#dialog-yesno").dialog("option", options).dialog("open");
             }
 
-            function updateBoard(candidate) {
+            function updateBoard(action) {
                 /// <summary>
                 /// プレイヤーから指示が返ってきた後のコールバック処理
                 /// </summary>
-                var c = candidate.content
-                switch (candidate.type) {
-                    case AICandidateType.move:
+                var c = action.content
+                switch (action.type) {
+                    case ActionType.move:
                         var movedPiece = _board.get(c.fromPos);
                         var bpFrom = BoardPosition.fromIndex(c.fromPos);
                         var bpTo = BoardPosition.fromIndex(c.toPos);
@@ -409,17 +421,18 @@
                         }
                         movePieceOnBoard(bpFrom, bpTo, movedPiece);
                         break;
-                    case AICandidateType.place:
+                    case ActionType.place:
                         _board.place(c.pos, c.piece, _board.turn);
                         var index = c.handIndex || jQuery.inArray(c.piece, _handPieces[_board.turn]);
                         var bpPos = BoardPosition.fromIndex(c.pos);
                         movePieceToBoard(index, bpPos);
                         break;
                     default:
-                        error("fatal error at updateBoard [Unexpected candidate type ({0})]", candidate.type);
+                        error("fatal error at updateBoard [Unexpected action type ({0})]", action.type);
                         break;
                 }
-                pp("評価値: " + _board.evaluate());
+                //pp("評価値: " + _board.evaluate());
+                pp(_board.sphereString());
             }
 
             function createPiece(piece, row, col) {
@@ -512,22 +525,22 @@
                 pieceObj.children("img").attr({ "width": 80, "height": 80 });
 
                 pieceObj.animate(
-            {
-                "left": newPos.col * 80,
-                "top": newPos.row * 80
-            },
-            {
-                duration: 400,
-                queue: false,
-                easing: "swing",
-                complete: function () {
-                    $(this).css({ "z-index": 1 })
-                            .attr({ "id": $.format("piece{0}_{1}", newPos.row, newPos.col) })
-                            .removeClass("piece-hand").addClass("piece");
-                    var waitTime = (_board.turn == PlayerTurn.man) ? 333 : 0;  // この時点で逆転済みなので条件も逆
-                    setTimeout(toggleTurn, waitTime);
-                }
-            });
+                    {
+                        "left": newPos.col * 80,
+                        "top": newPos.row * 80
+                    },
+                    {
+                        duration: 400,
+                        queue: false,
+                        easing: "swing",
+                        complete: function () {
+                            $(this).css({ "z-index": 1 })
+                                    .attr({ "id": $.format("piece{0}_{1}", newPos.row, newPos.col) })
+                                    .removeClass("piece-hand").addClass("piece");
+                            var waitTime = (_board.turn == PlayerTurn.man) ? 333 : 0;  // この時点で逆転済みなので条件も逆
+                            setTimeout(toggleTurn, waitTime);
+                    }
+                });
             }
 
             function movePieceToHand(pos, pieceVal) {
@@ -536,7 +549,7 @@
                 /// </summary>
                 var pieceObj = getPieceAt(pos);
 
-                pieceObj.css({ "z-index": 100 });
+                pieceObj.css({ "z-index": 1000 });
                 pieceObj.children("img")
                     .attr({ "width": 60, "height": 60, "src": Piece.imagePath(pieceVal) });
                 var handIndex = registerHandPiece(pieceVal);
@@ -550,9 +563,9 @@
                         queue: false,
                         easing: "swing",
                         complete: function () {
-                            $(this).css({ "z-index": 1 })
+                            $(this).css({ "z-index": 10 })
                                     .attr({ "id": $.format("piece-hand{0}_{1}", _board.turn, handIndex) })
-                                    .removeClass("piece").addClass("piece-hand");
+                                    /*.removeClass("piece")*/.addClass("piece-hand");
                         }
                     }
                 );
