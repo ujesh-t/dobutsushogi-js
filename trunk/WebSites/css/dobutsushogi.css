@@ -82,6 +82,7 @@ div#board-root
     border:0px solid black;
     width:320px;
     height:450px;
+    z-index:0; /* for IE6~7 */
 }     
 div#board-root .label-h 
 {
@@ -150,12 +151,14 @@ div#hand1
     left:40px;
     top:0px;
 	margin:0px 0px 0px 0px;
+	z-index:2;
 } 
 div#hand0
 {
     left:40px;
     top:410px;
     margin:0px 0px 0px 0px;
+    z-index:1;
 } 
 .hand .hand-lines
 {
@@ -178,6 +181,7 @@ div#board {
     left:40px;
     border-style:none;
     -webkit-tap-highlight-color: rgba(0,0,0,0);  
+    z-index:3;
 }
 table#board-lines
 {
