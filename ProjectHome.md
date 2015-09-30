@@ -1,0 +1,1 @@
+A JavaScript implementation of Dobutsu Shogi, a simplified Japanese Chess.
